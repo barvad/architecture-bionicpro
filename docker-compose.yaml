@@ -8,11 +8,11 @@ services:
       POSTGRES_USER: keycloak_user
       POSTGRES_PASSWORD: keycloak_password
     volumes:
-      - ./postgres-keycloak-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
   keycloak:
-    image: quay.io/keycloak/keycloak:21.1
+    image: quay.io/keycloak/keycloak:22.0
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
@@ -24,7 +24,7 @@ services:
       - start-dev
       - --import-realm
     volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./keycloak:/opt/keycloak/data/import:ro
     ports:
       - "8080:8080"
     depends_on:
@@ -36,7 +36,24 @@ services:
     ports:
       - "3000:3000"
     environment:
-      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_API_URL: http://localhost:5000
       REACT_APP_KEYCLOAK_URL: http://localhost:8080
       REACT_APP_KEYCLOAK_REALM: reports-realm
-      REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend
+      REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend    
+      
+  bionicpro-auth:
+    build:
+      context: ./BionicPRO.Auth/BionicPRO.Auth
+      dockerfile: Dockerfile
+    container_name: bionicpro-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Keycloak__Authority: http://keycloak:8080/realms/reports-realm
+      Keycloak__TokenEndpoint: http://keycloak:8080/realms/reports-realm/protocol/openid-connect/token
+    ports:
+      - "5000:5000"
+    depends_on:
+      - keycloak
+
+volumes:
+  postgres_data:

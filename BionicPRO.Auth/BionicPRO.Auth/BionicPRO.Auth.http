@@ -1,0 +1,6 @@
+@BionicPRO.Auth_HostAddress = http://localhost:5143
+
+GET {{BionicPRO.Auth_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
