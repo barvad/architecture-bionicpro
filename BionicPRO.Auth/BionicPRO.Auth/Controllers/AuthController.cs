@@ -1,10 +1,11 @@
 using BionicPRO.Auth.Services;
+using BionicPRO.Auth.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using BionicPRO.Auth.Models;
 
 namespace BionicPRO.Auth.Controllers;
 
@@ -49,15 +50,34 @@ public class AuthController : ControllerBase
         // Сохраняем sessionId в встроенную сессию ASP.NET Core
         HttpContext.Session.SetString("sessionId", sessionId);
 
-        var claims = new Claim[]
+        var claims = new List<Claim>
         {
             new(ClaimTypes.Name, request.Username),
             new("session_id", sessionId)
         };
 
+        // Извлекаем все claims из access token
+        var session = await _authService.GetValidSessionAsync(sessionId);
+        if (session.session != null)
+        {
+            var tokenClaims = ExtractClaimsFromToken(session.session.AccessToken);
+            foreach (var claim in tokenClaims)
+            {
+                claims.Add(claim);
+            }
+            _logger.LogInformation("Extracted {ClaimCount} claims for user {Username}", tokenClaims.Count, request.Username);
+        }
+
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         var principal = new ClaimsPrincipal(identity);
+        var hasOtp = principal
+            .FindAll("amr")
+            .Any(c => c.Value == "otp");
 
+        if (!hasOtp)
+        {
+            return Forbid("MFA required");
+        }
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, new AuthenticationProperties
         {
             IsPersistent = true,
@@ -119,5 +139,191 @@ public class AuthController : ControllerBase
             session.Username,
             session.AccessTokenExpiresAt
         });
+    }
+
+    [HttpGet("me/claims")]
+    [Authorize]
+    public IActionResult GetCurrentUserClaims()
+    {
+        var username = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "Unknown";
+        _logger.LogInformation("GetCurrentUserClaims request for user: {Username}", username);
+
+        var allClaims = User.Claims
+            .GroupBy(c => c.Type)
+            .Select(g => new
+            {
+                Type = g.Key,
+                Values = g.Select(c => c.Value).ToList()
+            })
+            .ToList();
+
+        var roles = User.FindAll(System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+
+        _logger.LogInformation("User {Username} has {ClaimCount} claim types and {RoleCount} roles", username, allClaims.Count, roles.Count);
+
+        return Ok(new
+        {
+            username,
+            claimsCount = allClaims.Count,
+            rolesCount = roles.Count,
+            roles,
+            allClaims
+        });
+    }
+
+    private static List<Claim> ExtractClaimsFromToken(string accessToken)
+    {
+        var claims = new List<Claim>();
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var token = handler.ReadJwtToken(accessToken);
+
+            // Копируем стандартные claims из токена
+            var claimsToSkip = new[] { "aud", "iat", "exp", "nbf", "jti" }; // Технические claims
+
+            foreach (var claim in token.Claims)
+            {
+                // Пропускаем технические claims
+                if (claimsToSkip.Contains(claim.Type))
+                    continue;
+
+                // Обрабатываем специальные claims
+                if (claim.Type == "realm_access" || claim.Type == "resource_access")
+                {
+                    ProcessAccessClaims(claim, claims);
+                }
+                else
+                {
+                    // Добавляем обычные claims
+                    claims.Add(new Claim(claim.Type, claim.Value));
+                }
+            }
+
+            return claims;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error extracting claims from token: {ex.Message}");
+            return new List<Claim>();
+        }
+    }
+
+    private static void ProcessAccessClaims(System.Security.Claims.Claim accessClaim, List<Claim> claims)
+    {
+        try
+        {
+            using (var document = System.Text.Json.JsonDocument.Parse(accessClaim.Value))
+            {
+                var root = document.RootElement;
+
+                if (accessClaim.Type == "realm_access")
+                {
+                    // Извлекаем realm roles
+                    if (root.TryGetProperty("roles", out var rolesElement))
+                    {
+                        foreach (var role in rolesElement.EnumerateArray())
+                        {
+                            if (role.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                var roleValue = role.GetString();
+                                if (!string.IsNullOrEmpty(roleValue))
+                                {
+                                    claims.Add(new Claim(ClaimTypes.Role, roleValue));
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (accessClaim.Type == "resource_access")
+                {
+                    // Извлекаем client/resource roles
+                    foreach (var property in root.EnumerateObject())
+                    {
+                        if (property.Value.TryGetProperty("roles", out var rolesElement))
+                        {
+                            foreach (var role in rolesElement.EnumerateArray())
+                            {
+                                if (role.ValueKind == System.Text.Json.JsonValueKind.String)
+                                {
+                                    var roleValue = role.GetString();
+                                    if (!string.IsNullOrEmpty(roleValue))
+                                    {
+                                        claims.Add(new Claim(ClaimTypes.Role, $"{property.Name}:{roleValue}"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error processing access claims: {ex.Message}");
+        }
+    }
+
+    private static List<string> ExtractRolesFromToken(string accessToken)
+    {
+        var roles = new List<string>();
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var token = handler.ReadJwtToken(accessToken);
+
+            // Keycloak stores roles in multiple possible locations
+            // 1. realm_access.roles (realm roles)
+            var realmAccessClaim = token.Claims.FirstOrDefault(c => c.Type == "realm_access");
+            if (realmAccessClaim != null)
+            {
+                using (var document = System.Text.Json.JsonDocument.Parse(realmAccessClaim.Value))
+                {
+                    var root = document.RootElement;
+                    if (root.TryGetProperty("roles", out var rolesElement))
+                    {
+                        foreach (var role in rolesElement.EnumerateArray())
+                        {
+                            if (role.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                roles.Add(role.GetString() ?? string.Empty);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. resource_access.[clientId].roles (client roles)
+            var resourceAccessClaim = token.Claims.FirstOrDefault(c => c.Type == "resource_access");
+            if (resourceAccessClaim != null)
+            {
+                using (var document = System.Text.Json.JsonDocument.Parse(resourceAccessClaim.Value))
+                {
+                    var root = document.RootElement;
+                    foreach (var property in root.EnumerateObject())
+                    {
+                        if (property.Value.TryGetProperty("roles", out var rolesElement))
+                        {
+                            foreach (var role in rolesElement.EnumerateArray())
+                            {
+                                if (role.ValueKind == System.Text.Json.JsonValueKind.String)
+                                {
+                                    roles.Add(role.GetString() ?? string.Empty);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return roles;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error extracting roles from token: {ex.Message}");
+            return new List<string>();
+        }
     }
 }

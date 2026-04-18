@@ -1,114 +1,159 @@
 {
-    "realm": "reports-realm",
+  "realm": "reports-realm",
+  "enabled": true,
+  "requiredActions": [
+  {
+    "alias": "CONFIGURE_TOTP",
+    "name": "Configure OTP",
     "enabled": true,
-    "roles": {
-      "realm": [
-        {
-          "name": "user",
-          "description": "Regular user role"
-        },
-        {
-          "name": "administrator",
-          "description": "Administrator role"
-        },
-        {
-          "name": "prothetic_user",
-          "description": "Prothetic user role with report access"
-        }
-      ]
-    },
-    "users": [
+    "defaultAction": true,
+    "priority": 10
+  }
+  ],
+  "authenticationFlows": [
+  {
+    "alias": "browser",
+    "providerId": "basic-flow",
+    "topLevel": true,
+    "builtIn": true,
+    "authenticationExecutions": [
       {
-        "username": "user1",
-        "enabled": true,
-        "email": "user1@example.com",
-        "firstName": "User",
-        "lastName": "One",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "password123",
-            "temporary": false
-          }
-        ],
-        "realmRoles": ["user"]
+        "authenticator": "auth-cookie",
+        "requirement": "ALTERNATIVE",
+        "priority": 10
       },
       {
-        "username": "user2",
-        "enabled": true,
-        "email": "user2@example.com",
-        "firstName": "User",
-        "lastName": "Two",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "password123",
-            "temporary": false
-          }
-        ],
-        "realmRoles": ["user"]
+        "authenticator": "auth-username-password-form",
+        "requirement": "REQUIRED",
+        "priority": 20
       },
       {
-        "username": "admin1",
-        "enabled": true,
-        "email": "admin1@example.com",
-        "firstName": "Admin",
-        "lastName": "One",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "admin123",
-            "temporary": false
-          }
-        ],
-        "realmRoles": ["administrator"]
-      },
-      {
-        "username": "prothetic1",
-        "enabled": true,
-        "email": "prothetic1@example.com",
-        "firstName": "Prothetic",
-        "lastName": "One",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "prothetic123",
-            "temporary": false
-          }
-        ],
-        "realmRoles": ["prothetic_user"]
-      },
-      {
-        "username": "prothetic2",
-        "enabled": true,
-        "email": "prothetic2@example.com",
-        "firstName": "Prothetic",
-        "lastName": "Two",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "prothetic123",
-            "temporary": false
-          }
-        ],
-        "realmRoles": ["prothetic_user"]
-      },
-      {
-        "username": "prothetic3",
-        "enabled": true,
-        "email": "prothetic3@example.com",
-        "firstName": "Prothetic",
-        "lastName": "Three",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "prothetic123",
-            "temporary": false
-          }
-        ],
-        "realmRoles": ["prothetic_user"]
+        "authenticator": "auth-otp-form",
+        "requirement": "REQUIRED",
+        "priority": 30
       }
-    ],
+    ]
+  }
+ ],
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Regular user role"
+      },
+      {
+        "name": "administrator",
+        "description": "Administrator role"
+      },
+      {
+        "name": "prothetic_user",
+        "description": "Prothetic user role with report access"
+      }
+    ]
+  },
+"groups": [
+  {
+    "name": "user",
+    "realmRoles": ["user"]
+  },
+  {
+    "name": "prothetic_user",
+    "realmRoles": ["prothetic_user"]
+  }
+],
+  "users": [
+    {
+      "username": "user1",
+      "enabled": true,
+      "email": "user1@example.com",
+      "firstName": "User",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["user"]
+    },
+    {
+      "username": "user2",
+      "enabled": true,
+      "email": "user2@example.com",
+      "firstName": "User",
+      "lastName": "Two",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["user"]
+    },
+    {
+      "username": "admin1",
+      "enabled": true,
+      "email": "admin1@example.com",
+      "firstName": "Admin",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["administrator"]
+    },
+    {
+      "username": "prothetic1",
+      "enabled": true,
+      "email": "prothetic1@example.com",
+      "firstName": "Prothetic",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "prothetic123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["prothetic_user"]
+    },
+    {
+      "username": "prothetic2",
+      "enabled": true,
+      "email": "prothetic2@example.com",
+      "firstName": "Prothetic",
+      "lastName": "Two",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "prothetic123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["prothetic_user"]
+    },
+    {
+      "username": "prothetic3",
+      "enabled": true,
+      "email": "prothetic3@example.com",
+      "firstName": "Prothetic",
+      "lastName": "Three",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "prothetic123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["prothetic_user"]
+    }
+  ],
+
   "clients": [
     {
       "clientId": "reports-frontend",
@@ -127,8 +172,104 @@
       "clientId": "reports-api",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "oNwoLQdvJAvRcL89SydqCWCe5ry1jMgq", 
+      "secret": "oNwoLQdvJAvRcL89SydqCWCe5ry1jMgq",
       "bearerOnly": true
     }
-  ]
+  ],
+
+  "userFederationProviders": [
+  {
+    "id": "openldap-provider",
+    "displayName": "OpenLDAP",
+    "providerName": "ldap",
+    "config": {
+  "enabled": "true",
+  "priority": "0",
+
+  "vendor": "other",
+  "connectionUrl": "ldap://ldap:389",
+  "bindDn": "cn=admin,dc=example,dc=com",
+  "bindCredential": "admin",
+
+  "usersDn": "ou=People,dc=example,dc=com",
+
+  "usernameLDAPAttribute": "uid",
+  "rdnLDAPAttribute": "uid",
+  "uuidLDAPAttribute": "entryUUID",
+
+  "userObjectClasses": "inetOrgPerson",
+
+  "searchScope": "2",
+
+  "importEnabled": "true",
+  "editMode": "READ_ONLY",
+
+  "pagination": "false",
+
+  "customUserSearchFilter": "(uid=*)",
+
+  "batchSizeForSync": "0",
+
+  "validatePasswordPolicy": "false"
+}
   }
+],
+
+"userFederationMappers": [
+  {
+    "name": "username-mapper",
+    "federationProviderDisplayName": "OpenLDAP",
+    "federationMapperType": "user-attribute-ldap-mapper",
+    "config": {
+      "ldap.attribute": "uid",
+      "user.model.attribute": "username",
+      "is.mandatory.in.ldap": "true"
+    }
+  },
+  {
+    "name": "email-mapper",
+    "federationProviderDisplayName": "OpenLDAP",
+    "federationMapperType": "user-attribute-ldap-mapper",
+    "config": {
+      "ldap.attribute": "mail",
+      "user.model.attribute": "email"
+    }
+  },
+  {
+    "name": "firstName-mapper",
+    "federationProviderDisplayName": "OpenLDAP",
+    "federationMapperType": "user-attribute-ldap-mapper",
+    "config": {
+      "ldap.attribute": "cn",
+      "user.model.attribute": "firstName"
+    }
+  },
+  {
+    "name": "lastName-mapper",
+    "federationProviderDisplayName": "OpenLDAP",
+    "federationMapperType": "user-attribute-ldap-mapper",
+    "config": {
+      "ldap.attribute": "sn",
+      "user.model.attribute": "lastName"
+    }
+  },
+  {
+  "name": "groups-mapper",
+  "federationProviderDisplayName": "OpenLDAP",
+  "federationMapperType": "group-ldap-mapper",
+  "config": {
+    "groups.dn": "ou=Groups,dc=example,dc=com",
+    "group.name.ldap.attribute": "cn",
+    "group.object.classes": "groupOfNames",
+    "membership.ldap.attribute": "member",
+    "membership.attribute.type": "DN",
+    "membership.user.ldap.attribute": "uid",
+    "user.roles.retrieve.strategy": "LOAD_GROUPS_BY_MEMBER_ATTRIBUTE",
+    "mode": "READ_ONLY",
+    "memberof.ldap.attribute": "memberOf",
+    "preserve.group.inheritance": "false",
+    "ignore.missing.groups": "false"
+  }
+}
+]
+}

@@ -42,16 +42,19 @@ public class ReportsController : ControllerBase
             _logger.LogWarning("GetReports: Invalid or expired session for sessionId: {SessionId}", sessionId);
             return Unauthorized();
         }
-
+        var roles = HttpContext.User.FindAll(System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+        _logger.LogInformation($"User {session.Username} roles: {string.Join(",",roles)}");
         var targetUserId = userId ?? session.UserId;
         _logger.LogInformation("GetReports: Session valid for user: {Username}, requesting reports for targetUserId: {TargetUserId}", session.Username, targetUserId);
-
-        if (!await _authService.HasAccessToReportAsync(sessionId, targetUserId))
+        
+        if (!await _authService.HasAccessToReportAsync(sessionId, targetUserId) && !roles.Contains("user"))
         {
             _logger.LogWarning("GetReports: Access denied for user: {Username}, targetUserId: {TargetUserId}", session.Username, targetUserId);
             return Forbid();
         }
-
+        // тут происходит вызов api сервиса отчётов и передаётся userId
         _logger.LogInformation("GetReports: Access granted for user: {Username}, fetching reports from backend", session.Username);
         var reports="{ \"reports\": [ { \"id\": 1, \"title\": \"Report 1\", \"content\": \"Content of report 1\" }, { \"id\": 2, \"title\": \"Report 2\", \"content\": \"Content of report 2\" } ] }";
         return Content(reports, "application/json");

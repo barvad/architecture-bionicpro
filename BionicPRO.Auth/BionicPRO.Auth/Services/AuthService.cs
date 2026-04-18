@@ -283,7 +283,7 @@ public class AuthService : IAuthService
             _logger.LogWarning("Session not found for access check, sessionId: {SessionId}", sessionId);
             return false;
         }
-
+        
         var hasAccess = session.UserId == reportUserId;
         _logger.LogInformation("Access check for user: {Username}, sessionUserId: {SessionUserId}, reportUserId: {ReportUserId}, access: {HasAccess}", 
             session.Username, session.UserId, reportUserId, hasAccess);
