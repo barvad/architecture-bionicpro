@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+
   keycloak_db:
     image: postgres:14
     environment:
@@ -14,6 +15,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:22.0
     environment:
+      KC_HOSTNAME_URL: http://localhost:8080
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: postgres
@@ -38,10 +40,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      REACT_APP_API_URL: http://localhost:5000
+      REACT_APP_API_URL: http://localhost:5000   
       REACT_APP_KEYCLOAK_URL: http://localhost:8080
       REACT_APP_KEYCLOAK_REALM: reports-realm
-      REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend    
+      REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend 
+    extra_hosts:
+      - "keycloak.local:host-gateway"   
       
   bionicpro-auth:
     build:
@@ -50,12 +54,15 @@ services:
     container_name: bionicpro-auth
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      Keycloak__Authority: http://keycloak:8080/realms/reports-realm
-      Keycloak__TokenEndpoint: http://keycloak:8080/realms/reports-realm/protocol/openid-connect/token
+      Keycloak__Authority: http://host.docker.internal:8080/realms/reports-realm
+      Keycloak__ClientSecret: oNwoLQdvJAvRcL89SydqCWCe5ry1jMgq
+      Keycloak__ClientId: reports-app
     ports:
       - "5000:5000"
     depends_on:
       - keycloak
+    extra_hosts:
+      - "keycloak.local:host-gateway"
       
   ldap:
     image: osixia/openldap:1.5.0
@@ -74,9 +81,118 @@ services:
       - ldap_data:/var/lib/ldap
       - ldap_config:/etc/ldap/slapd.d
     command: --copy-service --loglevel debug
+  
+  
+  report-api:
+    build:
+      context: ./BionicPRO.Reports/BionicPRO.Reports
+      dockerfile: Dockerfile
+    container_name: report_api_csharp
+    ports:
+      - "9999:9999"
+    environment:
+      - ConnectionStrings__ClickHouse=Host=clickhouse;Port=8123;Database=default
+      - Keycloak__Authority=http://host.docker.internal:8080/realms/reports-realm
+      - Keycloak__ClientId=reports-app
+    depends_on:
+      - clickhouse
+  
+  airflow-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+  
+  airflow-webserver:
+    image: apache/airflow:2.10.2
+    container_name: airflow_webserver
+    depends_on:
+      - airflow-db
+      - airflow-scheduler 
+    environment:
+      - AIRFLOW__API__SECRET_KEY=my_very_secret_key_change_me_12345
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres clickhouse-driver==0.2.6 pandas airflow-clickhouse-plugin
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_CONN_CRM_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_IOT_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_CLICKHOUSE_REPORTS=clickhouse://default:@clickhouse:9000/default
+    volumes:
+      - ./dag:/opt/airflow/dags
+    ports:
+      - "8085:8080"
+    command: bash -c "airflow db init && (airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin) && airflow webserver"
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /opt/airflow/airflow-webserver.pid ]"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  
+  airflow-scheduler:
+    image: apache/airflow:2.10.2
+    container_name: airflow_scheduler
+    depends_on:
+      - airflow-db
+    environment:
+      - AIRFLOW__API__SECRET_KEY=my_very_secret_key_change_me_12345
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres clickhouse-driver==0.2.6 pandas airflow-clickhouse-plugin
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_CONN_CRM_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_IOT_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_CLICKHOUSE_REPORTS=clickhouse://default:@clickhouse:9000/default
+    volumes:
+      - ./dag:/opt/airflow/dags
+    command: bash -c "airflow db init && airflow scheduler"
+
+ 
+  postgres-source:
+    image: postgres:15
+    container_name: postgres_sources
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: main_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_source:/var/lib/postgresql/data
+      - ./postgres-source/init.sql:/docker-entrypoint-initdb.d/init.sql
+  
+  
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.10
+    container_name: clickhouse_olap
+    ports:
+      - "8123:8123"   # HTTP интерфейс
+      - "9000:9000"   # Native TCP интерфейс
+      - "9009:9009"   # Inter-server
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
 volumes:
+  postgres_source:
   postgres_data:
   ldap_data:
   ldap_config:
+  clickhouse_data:

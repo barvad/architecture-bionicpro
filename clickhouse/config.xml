@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+    <listen_try>1</listen_try>
+    
+    <!-- Разрешить подключения без пароля -->
+    <allow_no_password>1</allow_no_password>
+    <allow_implicit_no_password>1</allow_implicit_no_password>
+    
+    <!-- Настройки для Airflow -->
+    <max_connections>4096</max_connections>
+    <keep_alive_timeout>3</keep_alive_timeout>
+    <max_concurrent_queries>100</max_concurrent_queries>
+    
+    <!-- Настройки сети -->
+    <interserver_http_port>9009</interserver_http_port>
+	
+    <any_setting>1</any_setting>
+    <!-- Логи -->
+    <logger>
+        <level>debug</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+    </logger>
+</clickhouse>

@@ -1,41 +1,44 @@
 import React, { useState, useEffect } from 'react';
 
-const AUTH_API_URL = process.env.REACT_APP_AUTH_API_URL || 'http://localhost:5000';
-const REPORTS_API_URL = process.env.REACT_APP_REPORTS_API_URL || 'http://localhost:8000';
+ const AUTH_API_URL = process.env.REACT_APP_AUTH_API_URL || 'http://localhost:5000';
+ const REPORTS_API_URL = process.env.REACT_APP_REPORTS_API_URL || 'http://localhost:5000';
 
-const ReportPage: React.FC = () => {
+  const ReportPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<{ username: string; roles: string[] } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkAuth = async () => {
-    try {
-      const response = await fetch(`${AUTH_API_URL}/api/auth/me/claims`, {
-        credentials: 'include'
-      });
+const checkAuth = async () => {
+  try {
+    const response = await fetch(`${AUTH_API_URL}/api/auth/me/claims`, {
+      credentials: 'include'
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUser({ username: data.username, roles: data.roles ?? [] });
-        setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-      }
-    } catch {
+    if (response.ok) {
+      const data = await response.json();
+      setUser({ username: data.username, roles: data.roles ?? [] });
+      setIsAuthenticated(true);
+    } else if (response.status === 401 && !redirecting) {
+      setRedirecting(true);
+      loginRedirect(window.location.href);
+    } else {
       setUser(null);
       setIsAuthenticated(false);
     }
-  };
+  } catch {
+    setUser(null);
+    setIsAuthenticated(false);
+  }
+};
 
   const loginRedirect = (returnUrl = '/') => {
-    // Redirect browser to backend login endpoint which challenges OIDC provider
     const url = `${AUTH_API_URL}/api/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
     window.location.href = url;
   };
