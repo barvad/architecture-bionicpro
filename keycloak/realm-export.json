@@ -219,10 +219,40 @@
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": true,
+	    "protocolMappers": [
+    {
+      "name": "audience-reports-api",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {
+        "included.client.audience": "reports-api",
+        "access.token.claim": "true"
+      }
+    }
+  ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
-    }
+    },
+	{
+  "clientId": "reports-api",
+  "enabled": true,
+
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+
+  "redirectUris": [],
+  "webOrigins": [],
+
+  "defaultClientScopes": [
+    "roles"
+  ]
+}
   ],
 "identityProviders":[
 {

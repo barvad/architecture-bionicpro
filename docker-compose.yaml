@@ -93,7 +93,7 @@ services:
     environment:
       - ConnectionStrings__ClickHouse=Host=clickhouse;Port=8123;Database=default
       - Keycloak__Authority=http://host.docker.internal:8080/realms/reports-realm
-      - Keycloak__ClientId=reports-app
+      - Keycloak__ClientId=reports-api
     depends_on:
       - clickhouse
   

@@ -16,7 +16,7 @@ builder.Services.AddAuthentication("Bearer")
     {
         var authority = builder.Configuration["Keycloak:Authority"]
                         ?? throw new InvalidOperationException("Keycloak Authority not configured");
-        var audience = builder.Configuration["Keycloak:Audience"]
+        var audience = builder.Configuration["Keycloak:ClientId"]
                        ?? throw new InvalidOperationException("Keycloak Audience not configured");
 
         options.Authority = authority;
@@ -25,6 +25,12 @@ builder.Services.AddAuthentication("Bearer")
 
         options.Events = new JwtBearerEvents
         {
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogError(context.Exception, "AUTH FAILED");
+                return Task.CompletedTask;
+            },
             OnTokenValidated = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
@@ -69,9 +75,9 @@ builder.Services.AddAuthentication("Bearer")
         };
         options.TokenValidationParameters = new TokenValidationParameters
         {
+            ValidAudience = audience,
             NameClaimType = "preferred_username",
-            RoleClaimType = ClaimTypes.Role,
-            ValidateAudience = false
+            RoleClaimType = ClaimTypes.Role
         };
     });
 
