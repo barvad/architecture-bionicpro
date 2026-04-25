@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+
   keycloak_db:
     image: postgres:14
     environment:
@@ -8,12 +9,13 @@ services:
       POSTGRES_USER: keycloak_user
       POSTGRES_PASSWORD: keycloak_password
     volumes:
-      - ./postgres-keycloak-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
   keycloak:
-    image: quay.io/keycloak/keycloak:21.1
+    image: quay.io/keycloak/keycloak:22.0
     environment:
+      KC_HOSTNAME_URL: http://localhost:8080
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: postgres
@@ -24,11 +26,13 @@ services:
       - start-dev
       - --import-realm
     volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./keycloak:/opt/keycloak/data/import:ro
     ports:
       - "8080:8080"
     depends_on:
       - keycloak_db
+      
+      
   frontend:
     build:
       context: ./frontend
@@ -36,7 +40,302 @@ services:
     ports:
       - "3000:3000"
     environment:
-      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_API_URL: http://localhost:5000   
       REACT_APP_KEYCLOAK_URL: http://localhost:8080
       REACT_APP_KEYCLOAK_REALM: reports-realm
-      REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend
+      REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend 
+    extra_hosts:
+      - "keycloak.local:host-gateway"   
+      
+  bionicpro-auth:
+    build:
+      context: ./BionicPRO.Auth/BionicPRO.Auth
+      dockerfile: Dockerfile
+    container_name: bionicpro-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Keycloak__Authority: http://host.docker.internal:8080/realms/reports-realm
+      Keycloak__ClientSecret: oNwoLQdvJAvRcL89SydqCWCe5ry1jMgq
+      Keycloak__ClientId: reports-app
+    ports:
+      - "5000:5000"
+    depends_on:
+      - keycloak
+    extra_hosts:
+      - "keycloak.local:host-gateway"
+      
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: openldap
+    environment:
+      LDAP_ORGANISATION: "Example"
+      LDAP_DOMAIN: "example.com"
+      LDAP_ADMIN_PASSWORD: "admin"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "true"
+      LDAP_SSL_HELPER_PREFIX: "ldap"
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - ./ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+    command: --copy-service --loglevel debug
+  
+  
+  report-api:
+    build:
+      context: ./BionicPRO.Reports/BionicPRO.Reports
+      dockerfile: Dockerfile
+    container_name: report_api_csharp
+    ports:
+      - "9999:9999"
+    environment:
+      - ConnectionStrings__ClickHouse=Host=clickhouse;Port=8123;Database=default
+      - Keycloak__Authority=http://host.docker.internal:8080/realms/reports-realm
+      - Keycloak__ClientId=reports-api
+      - Minio__Endpoint=http://minio:9000
+      - Minio__SecretKey=minioadmin123
+      - Minio__CdnUrl=http://localhost:8555
+      - Minio__AccessKey=minioadmin
+    depends_on:
+      clickhouse:
+        condition: service_started
+      minio:
+        condition: service_healthy
+  
+  airflow-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+  
+  airflow-webserver:
+    image: apache/airflow:2.10.2
+    container_name: airflow_webserver
+    depends_on:
+      - airflow-db
+      - airflow-scheduler 
+    environment:
+      - AIRFLOW__API__SECRET_KEY=my_very_secret_key_change_me_12345
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres clickhouse-driver==0.2.6 pandas airflow-clickhouse-plugin
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_CONN_CRM_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_IOT_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_CLICKHOUSE_REPORTS=clickhouse://default:@clickhouse:9000/default
+    volumes:
+      - ./dag:/opt/airflow/dags
+    ports:
+      - "8085:8080"
+    command: bash -c "airflow db init && (airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin) && airflow webserver"
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /opt/airflow/airflow-webserver.pid ]"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  
+  airflow-scheduler:
+    image: apache/airflow:2.10.2
+    container_name: airflow_scheduler
+    depends_on:
+      - airflow-db
+    environment:
+      - AIRFLOW__API__SECRET_KEY=my_very_secret_key_change_me_12345
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres clickhouse-driver==0.2.6 pandas airflow-clickhouse-plugin
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_CONN_CRM_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_IOT_DB=postgres://user:password@postgres-source:5432/main_db
+      - AIRFLOW_CONN_CLICKHOUSE_REPORTS=clickhouse://default:@clickhouse:9000/default
+    volumes:
+      - ./dag:/opt/airflow/dags
+    command: bash -c "airflow db init && airflow scheduler"
+
+ 
+  postgres-source:
+    image: postgres:15
+    container_name: postgres_sources
+    command: >
+      postgres -c wal_level=logical 
+              -c max_replication_slots=10 
+              -c max_wal_senders=10
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: main_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_source:/var/lib/postgresql/data
+      - ./postgres-source/init.sql:/docker-entrypoint-initdb.d/init.sql
+  
+  
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.10
+    container_name: clickhouse_olap
+    ports:
+      - "8123:8123"   # HTTP интерфейс
+      - "9000:9000"   # Native TCP интерфейс
+      - "9009:9009"   # Inter-server
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
+      - ./clickhouse/init-clickhouse.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      
+      
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_MAX__METADATA__SIZE: 8192
+    ports:
+      - "9500:9000"   # S3 API
+      - "9001:9001"   # Web консоль
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Создание бакета при запуске Minio
+  createbuckets:
+    image: minio/mc:latest
+    container_name: mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin123;
+      mc mb myminio/reports --ignore-existing;
+      mc anonymous set download myminio/reports;
+      echo 'Buckets created successfully';
+      exit 0;
+      "
+
+  # Nginx как CDN с кешированием
+  nginx-cdn:
+    image: nginx:alpine
+    container_name: nginx-cdn
+    ports:
+      - "8555:80"
+    volumes:
+      - ./nginx/cdn.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - minio
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "2181"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  debezium:
+    image: debezium/connect:2.5 
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres-source:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: debezium
+      CONFIG_STORAGE_TOPIC: debezium_config
+      OFFSET_STORAGE_TOPIC: debezium_offset
+      STATUS_STORAGE_TOPIC: debezium_status
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      
+      
+  debezium-setup:
+    image: curlimages/curl:latest
+    depends_on:
+      debezium:
+        condition: service_healthy
+    volumes:
+      - ./debezium/debezium-config.json:/config.json:ro
+    command: >
+      sh -c "
+        echo 'Waiting for Debezium to be ready...' &&
+        sleep 10 &&
+        cat /config.json &&
+        echo 'Registering PostgreSQL connector...' &&
+        curl -X POST http://debezium:8083/connectors -H 'Content-Type: application/json' -d @/config.json &&
+        echo 'Connector registered successfully!' &&
+        tail -f /dev/null
+      "
+
+
+
+volumes:
+  postgres_source:
+  postgres_data:
+  ldap_data:
+  ldap_config:
+  clickhouse_data:
+  minio_data:
+  nginx_cache:

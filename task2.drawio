@@ -1,0 +1,37 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="wGIUxPg04Ro8fDZQ1CdH" name="Prosthetic Reports Architecture">
+    <mxGraphModel dx="1414" dy="777" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="U4vfi6BCXwrjeih6LngB-1" parent="1" style="swimlane;whiteSpace=wrap;html=1;" value="Источники данных" vertex="1">
+          <mxGeometry height="200" width="160" x="40" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-2" parent="U4vfi6BCXwrjeih6LngB-1" style="shape=cylinder3;whiteSpace=wrap;html=1;" value="IoT DB (Датчики)" vertex="1">
+          <mxGeometry height="60" width="100" x="30" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-3" parent="U4vfi6BCXwrjeih6LngB-1" style="shape=cylinder3;whiteSpace=wrap;html=1;" value="CRM (Данные юзеров)" vertex="1">
+          <mxGeometry height="60" width="100" x="30" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Apache Airflow&#xa;(ETL Orchestrator)" vertex="1">
+          <mxGeometry height="60" width="140" x="280" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-5" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="OLAP DB (ClickHouse)&#xa;Витрины данных" vertex="1">
+          <mxGeometry height="80" width="120" x="500" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Backend API&#xa;(Report Service)" vertex="1">
+          <mxGeometry height="60" width="120" x="680" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-7" edge="1" parent="1" source="U4vfi6BCXwrjeih6LngB-1" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;" target="U4vfi6BCXwrjeih6LngB-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-8" edge="1" parent="1" source="U4vfi6BCXwrjeih6LngB-4" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;" target="U4vfi6BCXwrjeih6LngB-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="U4vfi6BCXwrjeih6LngB-9" edge="1" parent="1" source="U4vfi6BCXwrjeih6LngB-5" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;" target="U4vfi6BCXwrjeih6LngB-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
