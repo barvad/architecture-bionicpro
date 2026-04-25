@@ -160,6 +160,10 @@ services:
   postgres-source:
     image: postgres:15
     container_name: postgres_sources
+    command: >
+      postgres -c wal_level=logical 
+              -c max_replication_slots=10 
+              -c max_wal_senders=10
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -181,6 +185,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
+      - ./clickhouse/init-clickhouse.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: default
@@ -248,6 +253,82 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+      
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "2181"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  debezium:
+    image: debezium/connect:2.5 
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres-source:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: debezium
+      CONFIG_STORAGE_TOPIC: debezium_config
+      OFFSET_STORAGE_TOPIC: debezium_offset
+      STATUS_STORAGE_TOPIC: debezium_status
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      
+      
+  debezium-setup:
+    image: curlimages/curl:latest
+    depends_on:
+      debezium:
+        condition: service_healthy
+    volumes:
+      - ./debezium/debezium-config.json:/config.json:ro
+    command: >
+      sh -c "
+        echo 'Waiting for Debezium to be ready...' &&
+        sleep 10 &&
+        cat /config.json &&
+        echo 'Registering PostgreSQL connector...' &&
+        curl -X POST http://debezium:8083/connectors -H 'Content-Type: application/json' -d @/config.json &&
+        echo 'Connector registered successfully!' &&
+        tail -f /dev/null
+      "
+
 
 
 volumes:

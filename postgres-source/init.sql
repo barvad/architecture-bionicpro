@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS telemetry (
     level TEXT NOT NULL
 );
 
+CREATE PUBLICATION crm_publication FOR TABLE users, telemetry;
+
+SELECT * FROM pg_create_logical_replication_slot(
+    'debezium_slot',
+    'pgoutput'
+);
+
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM users LIMIT 1) THEN

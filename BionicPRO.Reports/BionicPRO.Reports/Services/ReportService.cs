@@ -51,7 +51,7 @@ public class ReportService : IReportService
 
             using var command = connection.CreateCommand();
             // Select rows for the specified date (inclusive start, exclusive next day)
-            command.CommandText = "SELECT * FROM daily_user_reports WHERE user_id = @userId AND report_date >= @start AND report_date < @end ORDER BY report_date DESC LIMIT 1";
+            command.CommandText = "SELECT * FROM daily_user_reports_final WHERE user_id = toString(@userId) AND report_date >= @start AND report_date < @end ORDER BY report_date DESC LIMIT 1";
             var start = date.Date;
             var end = start.AddDays(1);
             command.Parameters.Add(new ClickHouseDbParameter()
@@ -82,13 +82,13 @@ public class ReportService : IReportService
 
             var reportData = new DailyReportData
             {
-                UserId = reader.GetFieldValue<Guid>(0),
+                UserId = Guid.Parse( reader.GetFieldValue<string>(0)),
                 ReportDate = reader.GetFieldValue<DateTime>(1),
                 FullName = reader.GetString(2),
                 ProstheticModel = reader.GetString(3),
-                StepsCount = reader.GetFieldValue<uint>(4),
+                StepsCount = reader.GetFieldValue<ulong>(4),
                 AvgBatteryLevel = reader.GetFieldValue<float>(5),
-                ErrorsCount = reader.GetFieldValue<byte>(6)
+                ErrorsCount = reader.GetFieldValue<uint>(6)
             };
 
             var reportResponse = await ProcessReportAsync(reportData);
