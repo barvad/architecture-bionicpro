@@ -94,8 +94,15 @@ services:
       - ConnectionStrings__ClickHouse=Host=clickhouse;Port=8123;Database=default
       - Keycloak__Authority=http://host.docker.internal:8080/realms/reports-realm
       - Keycloak__ClientId=reports-api
+      - Minio__Endpoint=http://minio:9000
+      - Minio__SecretKey=minioadmin123
+      - Minio__CdnUrl=http://localhost:8555
+      - Minio__AccessKey=minioadmin
     depends_on:
-      - clickhouse
+      clickhouse:
+        condition: service_started
+      minio:
+        condition: service_healthy
   
   airflow-db:
     image: postgres:15
@@ -188,6 +195,59 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      
+      
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_MAX__METADATA__SIZE: 8192
+    ports:
+      - "9500:9000"   # S3 API
+      - "9001:9001"   # Web консоль
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Создание бакета при запуске Minio
+  createbuckets:
+    image: minio/mc:latest
+    container_name: mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin123;
+      mc mb myminio/reports --ignore-existing;
+      mc anonymous set download myminio/reports;
+      echo 'Buckets created successfully';
+      exit 0;
+      "
+
+  # Nginx как CDN с кешированием
+  nginx-cdn:
+    image: nginx:alpine
+    container_name: nginx-cdn
+    ports:
+      - "8555:80"
+    volumes:
+      - ./nginx/cdn.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - minio
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 
 volumes:
@@ -196,3 +256,5 @@ volumes:
   ldap_data:
   ldap_config:
   clickhouse_data:
+  minio_data:
+  nginx_cache:

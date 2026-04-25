@@ -69,14 +69,11 @@ const checkAuth = async () => {
 
       const data = await response.json();
 
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = data.reportUrl;
       a.download = `report-${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

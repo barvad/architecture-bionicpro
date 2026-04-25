@@ -3,6 +3,8 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Minio;
+using BionicPRO.Reports.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,27 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Configure MinIO
+var minioEndpoint = builder.Configuration["Minio:Endpoint"]
+    ?? throw new InvalidOperationException("Minio Endpoint not configured");
+var minioAccessKey = builder.Configuration["Minio:AccessKey"]
+    ?? throw new InvalidOperationException("Minio AccessKey not configured");
+var minioSecretKey = builder.Configuration["Minio:SecretKey"]
+    ?? throw new InvalidOperationException("Minio SecretKey not configured");
+
+var minioUri = new Uri(minioEndpoint);
+
+var minioClient = new MinioClient()
+    .WithEndpoint(minioUri.Host, minioUri.Port)
+    .WithSSL(minioUri.Scheme == "https")
+    .WithCredentials(minioAccessKey, minioSecretKey)
+    .Build();
+
+builder.Services.AddSingleton<IMinioClient>(minioClient);
+builder.Services.AddScoped<IMinioService, MinioService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
